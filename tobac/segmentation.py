@@ -1,4 +1,6 @@
 import logging
+import warnings
+warnings.filterwarnings("ignore", category=DeprecationWarning) 
 
 def segmentation_3D(features,field,dxy,threshold=3e-3,target='maximum',level=None,method='watershed',max_distance=None):
     return segmentation(features,field,dxy,threshold=threshold,target=target,level=level,method=method,max_distance=max_distance)
@@ -7,7 +9,7 @@ def segmentation_2D(features,field,dxy,threshold=3e-3,target='maximum',level=Non
     return segmentation(features,field,dxy,threshold=threshold,target=target,level=level,method=method,max_distance=max_distance)
 
 
-def segmentation_timestep(field_in,features_in,dxy,threshold=3e-3,target='maximum',level=None,method='watershed',max_distance=None,vertical_coord='auto'):    
+def segmentation_timestep(field_in,features_in,dxy,threshold=3e-3,target='maximum',level=None,method='watershed',max_distance=None,vertical_coord='auto',sigma_threshold=0):    
     """
     Function performing watershedding for an individual timestep of the data
     
@@ -33,7 +35,8 @@ def segmentation_timestep(field_in,features_in,dxy,threshold=3e-3,target='maximu
     features_out: pandas.DataFrame
                   feature dataframe including the number of cells (2D or 3D) in the segmented area/volume of the feature at the timestep
     """
-    from skimage.morphology import watershed
+    #from skimage.morphology import watershed
+    from skimage.segmentation import watershed
     # from skimage.segmentation import random_walker
     from scipy.ndimage import distance_transform_edt
     from copy import deepcopy
@@ -48,6 +51,10 @@ def segmentation_timestep(field_in,features_in,dxy,threshold=3e-3,target='maximu
 
     #Create dask array from input data:
     data=field_in.core_data()
+    from scipy.ndimage.filters import gaussian_filter
+
+    #ADDED BY AB - 23 JUNE
+    data=gaussian_filter(data, sigma=sigma_threshold) #smooth data slightly to create rounded, continuous field
     
     #Set level at which to create "Seed" for each feature in the case of 3D watershedding:
     # If none, use all levels (later reduced to the ones fulfilling the theshold conditions)
@@ -135,7 +142,7 @@ def segmentation_timestep(field_in,features_in,dxy,threshold=3e-3,target='maximu
 
     return segmentation_out,features_out
 
-def segmentation(features,field,dxy,threshold=3e-3,target='maximum',level=None,method='watershed',max_distance=None,vertical_coord='auto'):
+def segmentation(features,field,dxy,threshold=3e-3,target='maximum',level=None,method='watershed',max_distance=None,vertical_coord='auto',sigma_threshold=0):
     """
     Function using watershedding or random walker to determine cloud volumes associated with tracked updrafts
     
@@ -182,7 +189,7 @@ def segmentation(features,field,dxy,threshold=3e-3,target='maximum',level=None,m
     for i,field_i in enumerate(field_time):
         time_i=field_i.coord('time').units.num2date(field_i.coord('time').points[0])
         features_i=features.loc[features['time']==time_i]
-        segmentation_out_i,features_out_i=segmentation_timestep(field_i,features_i,dxy,threshold=threshold,target=target,level=level,method=method,max_distance=max_distance,vertical_coord=vertical_coord)                 
+        segmentation_out_i,features_out_i=segmentation_timestep(field_i,features_i,dxy,threshold=threshold,target=target,level=level,method=method,max_distance=max_distance,vertical_coord=vertical_coord,sigma_threshold=sigma_threshold)                 
         segmentation_out_list.append(segmentation_out_i)
         features_out_list.append(features_out_i)
         logging.debug('Finished segmentation for '+time_i.strftime('%Y-%m-%d_%H:%M:%S'))
